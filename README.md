@@ -1,5 +1,7 @@
 # hive_no_spark_SQL
 
+[![Anurag's GitHub stats](https://github-readme-stats.vercel.app/api?username=Hedeoer)](https://github.com/anuraghazra/github-readme-stats)
+
 >hive no spark SQL练习
 
 ## 1.查询连续登陆3天以上的用户
