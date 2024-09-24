@@ -1,2 +1,7 @@
 # hive_no_spark_SQL
-hive no spark SQL练习
+
+>hive no spark SQL练习
+
+1.查询连续登陆3天以上的用户
+2.查询连续登陆最大天数用户
+3.按照天的单位合并用户连续登录的时间区间，间隔不大于2天，均算连续登录
