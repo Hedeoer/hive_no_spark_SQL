@@ -201,3 +201,66 @@ select
     max(logout_date) lower_logout_date
 from t3
 group by user_id,acc_flag;
+
+
+
+CREATE TABLE stock_price_detail
+(
+  `id`      INT COMMENT '记录ID',
+  `ds`      DATE COMMENT '日期',
+  `price`   DOUBLE COMMENT '价格'
+) COMMENT '股票价格明细表'
+ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
+
+
+-- 插入模拟数据
+INSERT INTO stock_price_detail VALUES
+(1, '2024-09-01', 100.0),
+(2, '2024-09-02', 110.0),
+(3, '2024-09-03', 105.0),
+(4, '2024-09-04', 120.0),
+(5, '2024-09-05', 115.0),
+(6, '2024-09-06', 130.0),
+(7, '2024-09-07', 125.0),
+(8, '2024-09-08', 140.0),
+(9, '2024-09-09', 135.0),
+(10, '2024-09-10', 150.0);
+
+
+-- 求出股票波峰波谷。
+-- 波峰：当天的价格大于前一天和后一天，
+-- 波谷：当天的价格小于前一天和后一天)
+
+
+select
+    id,
+    ds,
+    price,
+    case
+        when before_price is null or after_price is null then 'abnormal'
+        when price > before_price and price > after_price then 'peak'
+        when price < before_price and price < after_price then 'valley'
+        else 'normal'
+    end
+    from (
+select
+    id,
+    ds,price,
+    lag(price,1,null) over(order by ds) before_price,
+    lead(price,1,null) over(order by ds) after_price
+from stock_price_detail
+    ) t;
+
+select
+    id, date1, is_open,
+    coalesce(
+        last_value(if(is_open=1, date1, null), true)
+        over (order by cast(date1 as date) rows between unbounded preceding and 1 preceding),
+        '1900-1-1'
+    ) pre_date,
+    coalesce(
+        first_value(if(is_open=1, date1, null), true)
+        over (order by cast(date1 as date) rows between 1 following and unbounded following),
+        '9999-1-1'
+    ) next_date
+from t0;
