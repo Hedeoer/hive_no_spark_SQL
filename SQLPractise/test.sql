@@ -251,16 +251,113 @@ select
 from stock_price_detail
     ) t;
 
+-- 求取每个店铺每次开业前一次开业日期和之后的最近的一次开业日期
+-- 比如 店铺id， 开业日期，前一次开业日期，后一次开业日期
+
+CREATE TABLE store_open_status
+(
+  `store_id`   STRING COMMENT '店铺ID',
+  `is_open`    INT COMMENT '是否开业标志位（1表示开业，0表示未开业）',
+  `open_date`  DATE COMMENT '开业日期'
+) COMMENT '店铺开业状态表'
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '\t';
+
+INSERT INTO store_open_status VALUES
+('S001', 1, '2023-01-15'),
+('S002', 0, '2022-12-10'),
+('S003', 1, '2023-03-05'),
+('S001', 0, '2022-11-19'),
+('S002', 1, '2023-05-01'),
+('S003', 0, '2021-09-11'),
+('S001', 1, '2022-07-13'),
+('S002', 0, '2022-06-19'),
+('S003', 1, '2023-02-22'),
+('S001', 1, '2021-10-23'),
+('S002', 0, '2023-04-30'),
+('S003', 1, '2022-08-14'),
+('S001', 1, '2021-03-19'),
+('S002', 0, '2022-02-05'),
+('S003', 1, '2023-01-01'),
+('S001', 0, '2023-03-11'),
+('S002', 1, '2022-04-25'),
+('S003', 0, '2021-05-20'),
+('S001', 1, '2023-02-27'),
+('S002', 0, '2022-07-22'),
+('S003', 1, '2021-11-11'),
+('S001', 1, '2022-03-31'),
+('S002', 0, '2023-02-16'),
+('S003', 1, '2021-12-30'),
+('S001', 1, '2022-05-19'),
+('S002', 0, '2021-10-27'),
+('S003', 1, '2023-03-23'),
+('S001', 1, '2021-08-02'),
+('S002', 0, '2022-09-14'),
+('S003', 1, '2023-04-10');
+
+
+-- 过滤出有开业的情况
+-- 取前一次开业日期，后一次开业日期
+
 select
-    id, date1, is_open,
-    coalesce(
-        last_value(if(is_open=1, date1, null), true)
-        over (order by cast(date1 as date) rows between unbounded preceding and 1 preceding),
-        '1900-1-1'
-    ) pre_date,
-    coalesce(
-        first_value(if(is_open=1, date1, null), true)
-        over (order by cast(date1 as date) rows between 1 following and unbounded following),
-        '9999-1-1'
-    ) next_date
-from t0;
+    store_id,
+    is_open,
+    open_date,
+    lag(open_date,1,null) over(partition by store_id order by open_date asc) before_open_date,
+    lead(open_date,1,null) over(partition by store_id order by open_date asc) after_open_date
+    from (
+select
+    *
+from store_open_status
+where is_open = 1
+    ) t1;
+
+--查询每条记录前后一次开业日期，不需要过滤未开业的情况
+
+select store_id,
+       is_open,
+       open_date,
+       last_value(if(is_open = 1 , open_date, null),true) over( partition by store_id order by open_date asc rows between unbounded preceding and 1 preceding ) before_open_date,
+       first_value(if(is_open = 1 , open_date, null),true) over( partition by  store_id order by open_date asc rows between 1 following and unbounded following ) after_open_date
+from store_open_status;
+
+
+select 
+    store_id,
+    open_date,
+    is_open,
+    coalesce(if(is_open = 1 and tag_1 = 1, lag(pre_date) OVER (partition by store_id order by open_date), pre_date), '1900-01-01') as pre_date,
+    coalesce(if(is_open = 1 and tag_2 = 1, lead(next_date) OVER (partition by store_id order by open_date), next_date), '9999-01-01') as next_date
+from (
+    select 
+        store_id,
+        open_date,
+        is_open,
+        if(is_open = 0, min(pre_date) over (partition by store_id, group_store_id), pre_date) as pre_date,
+        if(is_open = 0, max(next_date) over (partition by store_id, group_store_id), next_date) as next_date,
+        tag_1,
+        tag_2
+    from (
+        select 
+            store_id,
+            open_date,
+            is_open,
+            coalesce(lag(open_date) over (partition by store_id order by open_date), '1900-01-01') as pre_date,
+            coalesce(lead(open_date) over (partition by store_id order by open_date), '9999-01-01') as next_date,
+            sum(tag_1) over (partition by store_id order by open_date) AS group_store_id,
+            tag_1,
+            tag_2
+        from (
+            select 
+                store_id,
+                open_date,
+                is_open,
+                if(lag(is_open) OVER (partition by store_id order by open_date) = is_open, 0, 1) AS tag_1,
+                if(lead(is_open) OVER (partition by store_id order by open_date) = is_open, 0, 1) AS tag_2
+            from store_open_status
+        ) as temp1
+    ) as temp3
+) as temp2;
+
+
+
