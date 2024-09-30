@@ -469,4 +469,168 @@ select
     room_id,analysis_hour,
     count(distinct user_id) online_nums
 from t2
-group by room_id,analysis_hour
+group by room_id,analysis_hour;
+
+
+-- 求最小达到某累计金额日期
+-- 求取每个用户最近3天累计消费金额首次达到1W的日期
+WITH user_consume_order AS (
+    SELECT 'user1' AS user_id, '2023-01-01'  AS dt, 1000 AS price
+    UNION ALL SELECT 'user1', '2023-01-02', 1200
+    UNION ALL SELECT 'user1', '2023-01-03', 1300
+    UNION ALL SELECT 'user1', '2023-01-04', 1400
+    UNION ALL SELECT 'user1', '2023-01-05', 1500
+    UNION ALL SELECT 'user1', '2023-01-06', 1600
+    UNION ALL SELECT 'user1', '2023-01-07', 1700
+    UNION ALL SELECT 'user1', '2023-01-08', 1800
+    UNION ALL SELECT 'user1', '2023-01-09', 1900
+    UNION ALL SELECT 'user1', '2023-01-10', 2000
+
+    UNION ALL SELECT 'user2', '2023-01-01', 1100
+    UNION ALL SELECT 'user2', '2023-01-02', 1250
+    UNION ALL SELECT 'user2', '2023-01-03', 1350
+    UNION ALL SELECT 'user2', '2023-01-04', 1450
+    UNION ALL SELECT 'user2', '2023-01-05', 1550
+    UNION ALL SELECT 'user2', '2023-01-06', 1650
+    UNION ALL SELECT 'user2', '2023-01-07', 1750
+    UNION ALL SELECT 'user2', '2023-01-08', 1850
+    UNION ALL SELECT 'user2', '2023-01-09', 1950
+    UNION ALL SELECT 'user2', '2023-01-10', 2000
+
+    UNION ALL SELECT 'user3', '2023-01-01', 1050
+    UNION ALL SELECT 'user3', '2023-01-02', 1150
+    UNION ALL SELECT 'user3', '2023-01-03', 1250
+    UNION ALL SELECT 'user3', '2023-01-04', 1350
+    UNION ALL SELECT 'user3', '2023-01-05', 1450
+    UNION ALL SELECT 'user3', '2023-01-06', 1550
+    UNION ALL SELECT 'user3', '2023-01-07', 1650
+    UNION ALL SELECT 'user3', '2023-01-08', 1750
+    UNION ALL SELECT 'user3', '2023-01-09', 1850
+    UNION ALL SELECT 'user3', '2023-01-10', 1950
+)
+select user_id,
+       min(dt) first_date_to_limit
+from (select user_id,
+             dt,
+             sum(price_daily)
+                 over (partition by user_id order by dt asc rows between 3 preceding and current row) cumulative_price
+      from (SELECT user_id,
+                   dt,
+                   sum(coalesce(price, 0.0)) price_daily
+            FROM user_consume_order
+            group by user_id, dt) t1) t2
+where cumulative_price >= 4000
+group by user_id;
+
+
+-----------------------------------
+CREATE TABLE tmp_sales (
+    pay_time    DATE    COMMENT '付款日期',
+    member_id   STRING  COMMENT '用户id',
+    country     STRING  COMMENT '国家',
+    sku         STRING  COMMENT '商品名称',
+    sale_cnt    BIGINT  COMMENT '销量'
+) COMMENT '销售明细表'
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '\t';
+
+INSERT INTO tmp_sales VALUES
+('2024-09-01', 'M001', 'US', 'SKU001', 10),
+('2024-09-02', 'M002', 'CN', 'SKU002', 5),
+('2024-09-03', 'M003', 'IN', 'SKU003', 20),
+('2024-09-04', 'M004', 'UK', 'SKU004', 15),
+('2024-09-05', 'M005', 'DE', 'SKU005', 25);
+
+CREATE TABLE tmp_refund (
+    pay_time    DATE    COMMENT '退款商品对应的销售日期',
+    member_id   STRING  COMMENT '用户id',
+    refund_time DATE    COMMENT '退货日期',
+    country     STRING  COMMENT '国家',
+    sku         STRING  COMMENT '商品名称',
+    refund_cnt  BIGINT  COMMENT '退货量'
+) COMMENT '退款表'
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '\t';
+INSERT INTO tmp_refund VALUES
+('2024-09-01', 'M001', '2024-09-10', 'US', 'SKU001', 2),
+('2024-09-02', 'M002', '2024-09-11', 'CN', 'SKU002', 1),
+('2024-09-03', 'M003', '2024-09-12', 'IN', 'SKU003', 5),
+('2024-09-04', 'M004', '2024-09-13', 'UK', 'SKU004', 3),
+('2024-09-05', 'M005', '2024-09-14', 'DE', 'SKU005', 4);
+
+
+CREATE TABLE goods_info (
+    sku     STRING  COMMENT '商品名称',
+    cate    STRING  COMMENT '商品对应的类目'
+) COMMENT '商品信息表'
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '\t';
+INSERT INTO goods_info VALUES
+('SKU001', 'Electronics'),
+('SKU002', 'Apparel'),
+('SKU003', 'Books'),
+('SKU004', 'Furniture'),
+('SKU005', 'Toys');
+
+-- 1.计算各月各类目商品在各个国家销售后30天内的退货率（退货率=退货量/销量）
+    -- 算出有售量的国家名单
+    -- 构建明细表， 用户id， 商品id， 购买日期，退款日期，购买数量，退款数量
+with tt_country as (
+    select collect_list(country) as country_list
+    from (
+        select country
+        from tmp_sales
+        group by country
+    ) t
+),
+detail as (
+    select sku, date_format(refund_time, 'yyyy-MM') refund_month, cate, country,
+           sum(refund_cnt) / sum(sale_cnt) as refund_rate
+    from (
+        select t1.member_id,
+               t1.sku,
+               t1.pay_time,
+               t2.refund_time,
+               t1.sale_cnt,
+               coalesce(t2.refund_cnt, 0) refund_cnt,
+               t1.country,
+               t3.cate
+        from tmp_sales t1
+        left join tmp_refund t2
+            on t1.member_id = t2.member_id and t1.sku = t2.sku and t1.pay_time = t2.pay_time
+        left join goods_info t3
+            on t1.sku = t3.sku
+        where t2.refund_time is not null
+    ) tt
+    where datediff(refund_time, pay_time) < 30
+    group by date_format(refund_time, 'yyyy-MM'), cate, sku, country
+)
+select
+    *
+from detail;
+
+
+-- 2.把网站首次购买用户分成只购买服装、只购买非服装、既购买服装又购买非服装三类，分别计算每个月这三类用户的用户数量，以及
+-- ①在30天内复购任意类目的复购率
+-- ②在30天内复购相同类目的复购率
+-- （复购率=复购用户数/首购用户数）
+
+select member_id,
+       pay_time,
+       sku,
+       case when first_rn = 1 and
+from (select member_id,
+             pay_time,
+             sku,
+             cate,
+             row_number() over (partition by member_id order by pay_time asc) first_rn
+      from (select t1.member_id,
+                   t1.pay_time,
+                   t1.sku,
+                   t2.cate
+            from tmp_sales t1
+            left join goods_info t2
+            on t1.sku = t2.sku
+            group by member_id, pay_time, sku) t1) t2
+
+
