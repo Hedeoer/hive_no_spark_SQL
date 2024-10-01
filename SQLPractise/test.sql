@@ -615,22 +615,67 @@ from detail;
 -- ②在30天内复购相同类目的复购率
 -- （复购率=复购用户数/首购用户数）
 
-select member_id,
-       pay_time,
-       sku,
-       case when first_rn = 1 and
-from (select member_id,
-             pay_time,
-             sku,
-             cate,
-             row_number() over (partition by member_id order by pay_time asc) first_rn
-      from (select t1.member_id,
-                   t1.pay_time,
-                   t1.sku,
-                   t2.cate
-            from tmp_sales t1
-            left join goods_info t2
-            on t1.sku = t2.sku
-            group by member_id, pay_time, sku) t1) t2
 
+
+-- 需要标志位， 1. 用户首次购买时的的类型（只购买服装，只购买非服装，即购买服装又购买非服装）； 2. 用户首次购买后复购时，在30天内购买商品类目类型（复购任意类目，只复购相同类目）
+
+with first_user_purchase as (
+    select
+        member_id,first_pay_time,
+        max(case
+            when is_toys = '1' and is_not_toys = '1' then 'both'
+            when is_toys = '1' and is_not_toys = '0' then 'only_toys'
+            when is_toys = '0' and is_not_toys = '1' then 'not_toys'
+            else 'abnormal'
+        end )  as first_purchase_type
+        from (select t1.member_id,
+                     min(t1.pay_time)                 first_pay_time,
+                     max(if(t2.cate = 'Toys', 1, 0))  is_toys,
+                     max(if(t2.cate != 'Toys', 1, 0)) is_not_toys
+              from tmp_sales t1
+                       left join goods_info t2 on t1.sku = t2.sku
+              group by t1.member_id) t3
+        group by member_id, first_pay_time
+),  -- 用户首次购买记录
+    purchase as (
+select
+    t2.member_id,
+    t2.first_pay_time,
+    t2.first_purchase_type,
+    tt.cate
+    from (
+        select
+            member_id,
+            pay_time,
+            cate
+        from (
+            select
+                t1.member_id,
+                t1.pay_time,
+                t2.cate,
+                row_number() over (partition by member_id order by pay_time asc) rn
+            from tmp_sales t1
+            left join goods_info t2 on t1.sku = t2.sku
+             ) t1
+        where rn = 1) tt
+    left join first_user_purchase t2 on tt.member_id = t2.member_id and tt.pay_time = t2.first_pay_time
+
+),
+    repurchase_cate_type as (
+    select
+        t1.member_id,
+        t3.first_purchase_type,
+       if(t1.pay_time > t3.first_purchase_type and datediff(t1.pay_time, t3.first_pay_time) <= 30 and t2.cate = t3.cate, '1',0) some_cate,
+       if(t1.pay_time > t3.first_purchase_type and datediff(t1.pay_time, t3.first_pay_time) <= 30 , '1',0) is_repurchase
+    from tmp_sales t1
+    left join goods_info t2 on t1.sku = t2.sku
+    left join purchase t3 on t1.member_id = t3.member_id
+)
+select
+    first_purchase_type,
+    count(distinct member_id) repeat_users,
+    count(distinct (case when is_repurchase = '1' then member_id end )) / count(distinct member_id) repurchase_rate,
+    count(distinct (case when some_cate = '1' then member_id end )) / count(distinct member_id) some_cate_repurchase_rate
+from repurchase_cate_type t1
+group by first_purchase_type;
 
