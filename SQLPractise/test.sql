@@ -679,3 +679,83 @@ select
 from repurchase_cate_type t1
 group by first_purchase_type;
 
+
+--历史新低的商品id
+CREATE TABLE product_price_change (
+    id STRING COMMENT '商品ID',
+    start_price INT COMMENT '商品变更前价格',
+    after_price INT COMMENT '商品变更后价格',
+    `time` STRING COMMENT '时间戳'
+)
+COMMENT '商品价格变化表'
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '\t';
+
+-- 插入商品a111的6条数据
+INSERT INTO product_price_change VALUES
+('a111', 10, 8, '2023011000'),
+('a111', 8, 7, '2023011100'),
+('a111', 7, 5, '2023011200'),
+('a111', 5, 6, '2023011300'),
+('a111', 6, 4, '2023011400'),
+('a111', 4, 3, '2023011500'),
+('a111', 3, 2, '2023011600');
+
+-- 插入商品a112的6条数据
+INSERT INTO product_price_change VALUES
+('a112', 12, 11, '2023011000'),
+('a112', 11, 10, '2023011100'),
+('a112', 10, 8, '2023011200'),
+('a112', 8, 9, '2023011300'),
+('a112', 9, 7, '2023011400'),
+('a112', 7, 5, '2023011500');
+
+-- 插入商品a113的6条数据
+INSERT INTO product_price_change VALUES
+('a113', 15, 14, '2023011000'),
+('a113', 14, 13, '2023011100'),
+('a113', 13, 11, '2023011200'),
+('a113', 11, 10, '2023011300'),
+('a113', 10, 8, '2023011400'),
+('a113', 8, 7, '2023011500');
+
+
+with lasted_price as (select id,
+                             start_price,
+                             after_price,
+                             `time`,
+                             rn
+                      from (select id,
+                                   start_price,
+                                   after_price,
+                                   `time`,
+                                   row_number() over (partition by id order by `time` desc) rn
+
+                            from product_price_change) t1
+                      where rn = 1),
+    history_price as (
+        select
+            id,
+            min(start_price) min_start_price,
+            min(after_price) min_after_price
+        from (select
+                  *
+                  from (select id,
+                     start_price,
+                     after_price,
+                     `time`,
+                     row_number() over (partition by id order by `time` desc) rn
+              from product_price_change) t1
+                where rn > 1
+             )tt
+        group by id
+    )
+
+select
+    t1.id,
+    t1.after_price
+from lasted_price t1
+join history_price t2
+on t1.id = t2.id
+where t1.after_price < t2.min_start_price and t1.after_price < t2.min_after_price;
+
