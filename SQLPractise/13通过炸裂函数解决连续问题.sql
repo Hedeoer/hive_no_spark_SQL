@@ -83,3 +83,41 @@ where term is not null;
 select months_between( '2022-05-22' ,  '2022-03-21' );
 select `floor`(2.03225806);
 select split(space(2),' ');
+
+WITH data AS (
+    SELECT 'AAAA' AS contract, '2018-12-21' AS value_date, 9439.30 AS amount, 12 AS term
+    UNION ALL
+    SELECT 'AAAA' AS contract, '2019-03-21' AS value_date, 9439.30 AS amount, 12 AS term
+    UNION ALL
+    SELECT 'AAAA' AS contract, '2019-06-21' AS value_date, 9439.30 AS amount, 12 AS term
+    UNION ALL
+    SELECT 'AAAA' AS contract, '2019-09-21' AS value_date, 9439.30 AS amount, 12 AS term
+    UNION ALL
+    SELECT 'BBBB' AS contract, '2018-12-21' AS value_date, 9439.30 AS amount, 10 AS term
+    UNION ALL
+    SELECT 'BBBB' AS contract, '2019-02-02' AS value_date, 9439.30 AS amount, 10 AS term
+    UNION ALL
+    SELECT 'BBBB' AS contract, '2019-05-02' AS value_date, 9439.30 AS amount, 10 AS term
+    UNION ALL
+    SELECT 'BBBB' AS contract, '2019-08-02' AS value_date, 9439.30 AS amount, 10 AS term
+),
+dim AS (
+    SELECT contract,
+           add_months(value_date, pos) AS value_date,
+           term
+    FROM (
+        SELECT contract, MIN(value_date) AS value_date, MAX(amount) AS amount, MAX(term) AS term
+        FROM data
+        GROUP BY contract
+    ) d
+    LATERAL VIEW posexplode(split(space(term), '(?|$)')) temp AS pos, val
+)
+SELECT d.contract,
+       dim.value_date,
+       d.amount,
+       SUM(d.amount) OVER (PARTITION BY dim.contract ORDER BY dim.value_date) AS amount
+FROM dim
+LEFT JOIN (
+    SELECT contract, value_date, amount
+    FROM data
+) d ON dim.contract = d.contract AND dim.value_date = d.value_date;
