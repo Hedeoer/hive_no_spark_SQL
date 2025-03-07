@@ -92,7 +92,7 @@ FROM (
 LATERAL VIEW posexplode(split(temp_table.fan1,'-')) t1 AS fans_index1,fans1
 LATERAL VIEW posexplode(split(temp_table.fan2,'-')) t2 AS fans_index2,fans2
 WHERE t1.fans_index1 = t2.fans_index2
-)
+) result_table
 group by fans2
         ,fans1
 having count(*)=2;
