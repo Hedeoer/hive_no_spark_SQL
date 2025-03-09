@@ -98,40 +98,6 @@ from rt
          left join lt on rt.uid = lt.uid and datediff(login_date, register_date) > 0
 group by rt.register_date;
 
-
-WITH data AS (SELECT 1 AS uid, '2019-01-01 00:00:00' AS date_str
-              UNION ALL
-              SELECT 1, '2019-01-01 01:00:00'
-              UNION ALL
-              SELECT 1, '2019-01-02 00:00:00'
-              UNION ALL
-              SELECT 1, '2019-01-03 00:00:00'
-              UNION ALL
-              SELECT 2, '2019-02-01 00:00:00'
-              UNION ALL
-              SELECT 2, '2019-02-02 00:00:00'
-              UNION ALL
-              SELECT 3, '2019-03-04 00:00:00'
-              UNION ALL
-              SELECT 3, '2019-03-05 00:00:00'
-              UNION ALL
-              SELECT 3, '2019-03-06 00:00:00'
-              UNION ALL
-              SELECT 3, '2019-03-07 00:00:00')
-SELECT a.left_date,
-       SUM((CASE WHEN DATEDIFF(b.right_date, a.left_date) = 1 THEN 1 ELSE 0 END)) /
-       COUNT(DISTINCT a.uid)                                                                              AS lst1date_rate, -- 次日留存率
-       SUM((CASE WHEN DATEDIFF(b.right_date, a.left_date) = 3 THEN 1 ELSE 0 END)) /
-       COUNT(DISTINCT a.uid)                                                                              AS lst3date_rate, -- 三日留存率
-       SUM((CASE WHEN DATEDIFF(b.right_date, a.left_date) = 7 THEN 1 ELSE 0 END)) /
-       COUNT(DISTINCT a.uid)                                                                              AS lst7date_rate  -- 七日留存率
-FROM (SELECT uid, CAST(substr(date_str, 1, 10) AS DATE) AS left_date FROM data) a
-         LEFT JOIN
-     (SELECT uid, CAST(substr(date_str, 1, 10) AS DATE) AS right_date FROM data) b
-     ON a.uid = b.uid AND a.left_date < b.right_date
-GROUP BY a.left_date;
-
-
 WITH data AS (
     SELECT 1 AS uid, '2019-02-01 08:30:00' AS date_str
     UNION ALL
