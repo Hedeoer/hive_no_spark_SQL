@@ -26,14 +26,49 @@ WITH data AS (
     SELECT '苹果' AS brand, '2018-09-01' AS begin_date, '2018-09-05' AS end_date  UNION ALL
     SELECT '苹果' AS brand, '2018-09-03' AS begin_date, '2018-09-06' AS end_date  UNION ALL
     SELECT '苹果' AS brand, '2018-09-09' AS begin_date, '2018-09-15' AS end_date
-)
+),
+    pre_max_end_date as (
+        select brand,
+               to_date(begin_date) `begin_date`,
+               to_date(end_date) `end_date`,
+               max(end_date) over(partition by brand order by begin_date rows between unbounded preceding and 1 preceding) pre_max_end_date
+        from data
+    ),
+    group_date as (
+        select
+            brand,
+            begin_date,
+            end_date,
+            pre_max_end_date,
+            sum(is_new) over(partition by brand order by begin_date) group_id
+        from (
+            select brand,
+                   begin_date,
+                   end_date,
+                   pre_max_end_date,
+                   -- 如果开始时间小于等于前一个最大结束时间，则为日期重叠，标记为相同组，记为0，否则为1
+                   case
+                       when pre_max_end_date is null then 0
+                       when begin_date <= pre_max_end_date then 0
+                       else 1 end is_new
+            from pre_max_end_date
+             ) t
+    ),
+    -- 按照分组合并重叠区间
+    merge_group as (
+        select
+            brand,
+            group_id,
+            min(begin_date) begin_date,
+            max(end_date) end_date
+        from group_date
+        group by brand,group_id
+    )
 select
     brand,
-    count(distinct date_add(begin_date,pos)) read_days
-from data
-lateral view posexplode(split(space(datediff(end_date,begin_date)),'')) tmp as pos,val
+    sum(datediff(end_date,begin_date)+1) read_days
+from merge_group
 group by brand;
-
 
 -- 方式一
 -- 直播间用户在线时长计算，有登录时间重叠的算一次时长
@@ -154,7 +189,7 @@ user_room_time_points AS (
     SELECT
         user_id,
         room_id,
-        COALESCE(unix_timestamp(logout_time), unix_timestamp()) AS time_point,
+        COALESCE(unix_timestamp(logout_time), unix_timestamp('2023-04-11 00:00:00')) AS time_point,
         -1 AS flag
     FROM user_live_sessions
 
@@ -247,7 +282,7 @@ WITH user_live_sessions AS (
             user_id,
             room_id,
             unix_timestamp(login_time) as start_time,
-            coalesce(unix_timestamp(logout_time), unix_timestamp()) as end_time
+            coalesce(unix_timestamp(logout_time), unix_timestamp('2023-04-11 00:00:00')) as end_time
         from user_live_sessions
     ),
     -- 用户在直播间的之前的最大end_time
