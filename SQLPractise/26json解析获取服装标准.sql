@@ -1,3 +1,70 @@
+# ---------------------hive中常见的json解析函数 ----------------------
+
+-- get_json_object
+with t1 as (
+
+    select
+    '{"store":
+      {"fruit":\[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}],
+       "bicycle":{"price":19.95,"color":"red"}
+      },
+     "email":"amy@only_for_json_udf_test.net",
+     "owner":"amy"
+    }'
+    as        str
+)
+select
+    get_json_object(str, '$.store.bicycle.color') color,
+    get_json_object(str, '$.store.bicycle.price') price,
+    get_json_object(str, '$.store.fruit[0]'),
+    get_json_object(str, '$.store.fruit[1]')
+from t1;
+
+-- json_tuple
+with t1 as (
+
+    select
+    '{"store":
+      {"fruit":\[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}],
+       "bicycle":{"price":19.95,"color":"red"}
+      },
+     "email":"amy@only_for_json_udf_test.net",
+     "owner":"amy"
+    }'
+    as        str
+)
+
+select
+    json_tuple(fruit, 'color', 'price') as (color, price)
+from (
+    select get_json_object(str, '$.store.bicycle') fruit from t1
+) t2;
+
+-- 炸裂json中的数组
+with t1 as (
+
+    select
+    '{"store":
+      {"fruit":\[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}],
+       "bicycle":{"price":19.95,"color":"red"}
+      },
+     "email":"amy@only_for_json_udf_test.net",
+     "owner":"amy"
+    }'
+    as        str
+)
+select
+    *
+from (
+    select
+    get_json_object(str, '$.store.fruit') fruits
+    from t1
+     ) t2
+lateral view explode(split(replace(replace(t2.fruits,'[',''),']',''), '\\},\\{')) tmp as fruit;
+
+# ---------------------hive中常见的json解析函数 ----------------------
+
+
 
 -- hive 3.1.3版本
 -- json解析获取 ‘服装标准尺寸’的 sizelist
