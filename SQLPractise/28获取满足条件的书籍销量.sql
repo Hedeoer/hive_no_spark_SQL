@@ -104,7 +104,7 @@ group by t2.book_id,t2.name,t2.available_from
 having sum(coalesce(quantity,0)) < 10;
 
 -- 日期汇总
-/*# Hive 日期时间函数：各种时间单位"之前"的计算方法
+# Hive 日期时间函数：各种时间单位"之前"的计算方法
 
 Hive 3.1.3 提供了多种函数来计算不同时间单位之前的日期或时间。以下是按时间单位从小到大的完整列表和示例：
 
@@ -214,4 +214,4 @@ SELECT add_months('2023-04-15', -12)
   -- 截断到年初
   SELECT trunc('2023-04-15', 'YY')
   -- 结果：2023-01-01
-  ```*/
+  ```
