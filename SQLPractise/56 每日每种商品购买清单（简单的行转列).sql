@@ -161,3 +161,6 @@ from dim_item_category t1
 order by t1.item_category;
 
 
+-- 根据date_format函数的用法，可以使用 date_format(date，'EEEE') 来获取星期几的名称
+-- 例如，date_format('2020-06-01', 'EEEE') 返回 'Monday'
+select date_format('2020-06-01', 'EEEE');
