@@ -126,3 +126,57 @@ from year_salses t1
          left join Product t2
                    on t1.product_id = t2.product_id
 order by t1.product_id, t1.report_year;
+
+
+
+-- 方式二
+WITH
+-- 1. 模拟 Product 表
+Product AS (
+    SELECT 1 AS product_id, 'LC Phone' AS product_name UNION ALL
+    SELECT 2, 'LC T-Shirt' UNION ALL
+    SELECT 3, 'LC Keychain'
+),
+
+-- 2. 模拟 Sales 表
+Sales AS (
+    SELECT 1 AS product_id, CAST('2019-01-25' AS DATE) AS period_start, CAST('2019-02-28' AS DATE) AS period_end, 100 AS average_daily_sales UNION ALL
+    SELECT 2, CAST('2018-12-01' AS DATE), CAST('2020-01-01' AS DATE), 10 UNION ALL
+    SELECT 3, CAST('2019-12-01' AS DATE), CAST('2020-01-31' AS DATE), 1
+),
+
+-- 3. 创建一个包含报告年份的辅助 CTE
+Years AS (
+    SELECT 2018 AS report_year UNION ALL
+    SELECT 2019 UNION ALL
+    SELECT 2020
+)
+
+-- 4. 主查询
+SELECT
+    p.product_id,
+    p.product_name,
+    y.report_year,
+    -- 计算有效销售天数: DATEDIFF(有效结束日期, 有效开始日期) + 1
+    -- 再乘以日均销售额得到总额
+    (DATEDIFF(
+         -- 有效结束日期 = MIN(销售结束日期, 当年最后一天)
+             LEAST(s.period_end, CAST(CONCAT(y.report_year, '-12-31') AS DATE)),
+         -- 有效开始日期 = MAX(销售开始日期, 当年第一天)
+             GREATEST(s.period_start, CAST(CONCAT(y.report_year, '-01-01') AS DATE))
+     ) + 1) * s.average_daily_sales AS total_amount
+FROM
+    Sales s
+-- 关联产品信息
+        JOIN
+    Product p ON s.product_id = p.product_id
+-- 将每个销售记录与每个年份组合，以便计算每个年份的销售额
+        CROSS JOIN
+    Years y
+-- 过滤掉销售周期与当前年份完全没有交集的组合
+WHERE
+    GREATEST(s.period_start, CAST(CONCAT(y.report_year, '-01-01') AS DATE))
+        <=
+    LEAST(s.period_end, CAST(CONCAT(y.report_year, '-12-31') AS DATE))
+ORDER BY
+    p.product_id, y.report_year;
